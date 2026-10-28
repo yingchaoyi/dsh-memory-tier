@@ -1,0 +1,4 @@
+# dsh-memory-tier bundle patch：把三档记忆挂进 profile。
+- insert:
+    - id: memory-tier
+      name: dsh-memory-tier

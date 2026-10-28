@@ -1,0 +1,63 @@
+{
+  "name": "dsh-memory-tier",
+  "version": "0.1.0",
+  "description": "DSH 插件 · 三档记忆：长期（永久关键事实 + 人设，主人可改）/ 中期（默认 30 天）/ 短期（默认 4 天）。本地检索、按相关度注入，省 token。",
+  "type": "module",
+  "main": "lib/index.mjs",
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "memory",
+    "long-term-memory",
+    "rag",
+    "qq-bot"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "slots"
+      ],
+      "external": [
+        "react"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "author": "yingchaoyi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yingchaoyi/dsh-memory-tier.git"
+  },
+  "homepage": "https://github.com/yingchaoyi/dsh-memory-tier#readme",
+  "bugs": {
+    "url": "https://github.com/yingchaoyi/dsh-memory-tier/issues"
+  }
+}
