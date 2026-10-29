@@ -28,7 +28,7 @@ const fail = (m) => { console.error('✗ ' + m); process.exitCode = 1 }
 const ok = (m) => console.log('✓ ' + m)
 const assert = (cond, m) => (cond ? ok(m) : fail(m))
 
-assert(tools.size === 4, '挂了 4 个工具：' + [...tools.keys()].join(', '))
+assert(tools.size === 5, '挂了 5 个工具：' + [...tools.keys()].join(', '))
 assert(routes.size >= 6, '挂了 ' + routes.size + ' 条路由')
 
 const call = async (name, args) => tools.get(name).execute(args || {}, {})
@@ -52,6 +52,13 @@ r = await call('mem_search', { query: '完全不存在的词xyz' })
 assert(r.ok && r.text.includes('没有找到'), '搜不到时明确说没有')
 
 // 统计
+r = await call('mem_persona', {})
+assert(r.ok && r.text.includes('空的'), 'mem_persona 空态可读：' + r.text)
+r = await call('mem_persona', { text: '自称老子，称主人为老板；毒舌有梗，2~5 句' })
+assert(r.ok && r.text.includes('人设已更新'), 'mem_persona 可写：' + r.text)
+r = await call('mem_persona', {})
+assert(r.text.includes('自称老子'), 'mem_persona 写回可读：' + r.text)
+
 r = await call('mem_stats', {})
 assert(r.ok && /长期 1\/120/.test(r.text), 'mem_stats 条数对')
 
