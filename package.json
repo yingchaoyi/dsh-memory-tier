@@ -1,6 +1,6 @@
 {
   "name": "dsh-memory-tier",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "DSH 插件 · 三档记忆：长期（永久关键事实 + 人设，主人可改）/ 中期（默认 30 天）/ 短期（默认 4 天）。本地检索、按相关度注入，省 token。",
   "type": "module",
   "main": "lib/index.mjs",
