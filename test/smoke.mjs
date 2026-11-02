@@ -99,6 +99,14 @@ const postJson = async (path, body) => {
 }
 let sres = await postJson('/api/memory-tier/settings', { shortDays: 9, caps: { short: 5 } })
 assert(sres.ok && sres.settings.shortDays === 9 && sres.settings.caps.short === 5, '参数保存（短期 9 天 / 容量 5）')
+// 嵌套字段不能被浅合并打回默认（改中期不该动长期）
+const before = sres.settings
+const rLong = await postJson('/api/memory-tier/settings', { inject: { long: 30 } })
+assert(rLong.settings.inject.long === 30 && rLong.settings.inject.mid === before.inject.mid, '改长期加载条数不影响中期')
+const rMid = await postJson('/api/memory-tier/settings', { inject: { mid: 7 } })
+assert(rMid.settings.inject.long === 30 && rMid.settings.inject.mid === 7, '改中期加载条数不影响长期')
+const rCaps = await postJson('/api/memory-tier/settings', { caps: { mid: 300 } })
+assert(rCaps.settings.caps.mid === 300 && rCaps.settings.caps.long === before.caps.long, '改中期容量不影响长期容量')
 
 // 短期超容量 → 按分数淘汰，且保留高重要度的
 for (let i = 0; i < 9; i++) {
