@@ -114,6 +114,8 @@ window.__ModuleLoader__.load({
         setBusy(false)
       }
 
+      const patchStyle = (patch) => patchSettings({ styleRef: Object.assign({}, (s.styleRef || {}), patch) })
+
       if (!state) {
         return h('div', { className: 'mt-wrap' }, h('div', { className: 'mt-muted' }, '读取中…'))
       }
@@ -260,6 +262,34 @@ window.__ModuleLoader__.load({
               if (v !== (s.personaText || '')) patchSettings({ personaText: v })
             },
           }),
+        ]),
+
+        // ---- 贴吧语料 ----
+        h('div', { key: 'style', className: 'mt-card' }, [
+          h('div', { key: 't', className: 'mt-sub' }, '贴吧语料参考（可选）'),
+          h('div', { key: 'd', className: 'mt-muted' },
+            '打开后，白名单里的 QQ 群会多带几条贴吧老哥的句式当参考。语料是刷吧时攒的每吧样本，用完即走，不进长期记忆。'),
+          h('label', { key: 'on', className: 'mt-check' }, [
+            h('input', {
+              key: 'c',
+              type: 'checkbox',
+              checked: !!(s.styleRef && s.styleRef.enabled),
+              onChange: (e) => patchStyle({ enabled: e.target.checked }),
+            }),
+            h('span', { key: 'x' }, '在 QQ 群里也参考贴吧语料'),
+          ]),
+          h('input', {
+            key: 'g',
+            className: 'mt-in',
+            defaultValue: ((s.styleRef && s.styleRef.groups) || []).join(' '),
+            placeholder: '白名单群号，空格隔开（只对这里的群生效）',
+            onBlur: (e) => patchStyle({ groups: e.target.value.split(/[\s,，]+/).filter(Boolean) }),
+          }),
+          h('div', { key: 'n', className: 'mt-row' }, [
+            h(NumField, { key: 'pb', label: '每个吧取几条', value: (s.styleRef || {}).perBar, min: 1, max: 5, onChange: (v) => patchStyle({ perBar: v }) }),
+            h(NumField, { key: 'b', label: '一次拼几个吧', value: (s.styleRef || {}).bars, min: 1, max: 8, onChange: (v) => patchStyle({ bars: v }) }),
+            h(NumField, { key: 'bu', label: '这段字数上限', value: (s.styleRef || {}).budget, min: 100, max: 2000, suffix: '字', onChange: (v) => patchStyle({ budget: v }) }),
+          ]),
         ]),
 
         // ---- 三档列表 ----
