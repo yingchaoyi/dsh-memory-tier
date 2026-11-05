@@ -78,6 +78,7 @@ window.__ModuleLoader__.load({
       const [q, setQ] = useState('')          // 这一档里的搜索词
       const [page, setPage] = useState(0)     // 第几页（从 0 起）
       const [groupId, setGroupId] = useState('')  // 当前在管哪个群
+      const [groupDraft, setGroupDraft] = useState({ id: '', name: '' })  // 添加群的两个框
       const alive = useRef(true)
 
       const refresh = useCallback(async (q, gid) => {
@@ -88,7 +89,10 @@ window.__ModuleLoader__.load({
           const s = await jget('/state' + (params.length ? '?' + params.join('&') : ''))
           if (alive.current) {
             setState(s)
-            if (s && s.group && !gid) setGroupId(s.group)
+            // 面板只列群：当前记的是网页/私聊的默认库（或者那个群已经被删了）就顺到第一个群
+            const ids = ((s && s.groups) || []).map((x) => x.id)
+            const pick = gid && ids.includes(gid) ? gid : (ids.includes(s && s.group) ? s.group : (ids[0] || ''))
+            if (pick && pick !== groupId) setGroupId(pick)
           }
         } catch (error) {
           if (alive.current) setMsg('读取失败：' + error.message)
@@ -107,6 +111,37 @@ window.__ModuleLoader__.load({
       const flash = (text) => {
         setMsg(text)
         setTimeout(() => { if (alive.current) setMsg('') }, 2600)
+      }
+
+      // 群管理：手动加一个群号（顺带起个名），或者把一个群整份删掉
+      const addGroup = async () => {
+        const id = groupDraft.id.trim()
+        if (!/^\d{5,12}$/.test(id)) { flash('群号得是 5~12 位数字'); return }
+        setBusy(true)
+        try {
+          const r = await jpost('/group', { groupId: id, name: groupDraft.name.trim() })
+          if (r && r.ok === false) throw new Error(r.message || '添加失败')
+          setGroupDraft({ id: '', name: '' })
+          setGroupId(id)
+          await refresh(undefined, id)
+          flash(`群 ${id} 加上了`)
+        } catch (error) { flash('添加失败：' + error.message) }
+        setBusy(false)
+      }
+
+      const removeGroup = async (g) => {
+        const label = g.name ? `${g.name}（${g.id}）` : `群 ${g.id}`
+        if (!window.confirm(`把 ${label} 的三档记忆删掉？删了找不回来（聊天记录不受影响）。`)) return
+        setBusy(true)
+        try {
+          const r = await jpost('/group', { groupId: g.id, action: 'delete' })
+          if (r && r.ok === false) throw new Error(r.message || '删除失败')
+          // 删的是当前这个就把选中清掉，让外面重新挑一个
+          if (groupId === g.id) setGroupId('')
+          else await refresh(undefined, groupId)
+          flash('删了；这个群要是还在聊，下条消息会重新建个空库')
+        } catch (error) { flash('删除失败：' + error.message) }
+        setBusy(false)
       }
 
       // 所有写操作都带上当前群，后端按群落库
@@ -237,19 +272,53 @@ window.__ModuleLoader__.load({
 
         // ---- 群切换：每个群一套独立记忆 ----
         h('div', { key: 'groups', className: 'mt-card' }, [
-          h('div', { key: 't', className: 'mt-sub' }, '按群分开管理'),
+          h('div', { key: 't', className: 'mt-sub' }, '群'),
           h('div', { key: 'd', className: 'mt-muted' },
-            '每个 QQ 群一套自己的三档记忆，互相看不见、也不会互相占预算。换群只影响这里的查看和手动增删；聊天时自动按当前群取。'),
-          h('div', { key: 'chips', className: 'mt-chips' }, (state.groups || []).map((g) =>
-            h('div', {
-              key: g.id,
-              className: 'mt-chip' + (g.id === (state.group || '') ? ' on' : ''),
-              onClick: () => { setGroupId(g.id); setPage(0) },
-            }, [
-              h('div', { key: 'l', className: 'mt-chip-label' }, g.name || g.id),
-              h('div', { key: 'v', className: 'mt-chip-val' }, `${g.counts.long}·${g.counts.mid}·${g.counts.short}`),
-              h('div', { key: 'h', className: 'mt-chip-hint' }, g.id === 'default' ? '网页/私聊' : g.id),
-            ]))),
+            '每个 QQ 群一套自己的三档记忆，互相看不见、也不会互相占预算。这里只管群——网页和私聊不走这套，固定用默认库，不占这里的名额。'),
+          (state.groups || []).length === 0
+            ? h('div', { key: 'empty', className: 'mt-muted' }, '还没有群。下面填个群号加进来，或者等群里发条消息让它自己冒出来。')
+            : h('div', { key: 'chips', className: 'mt-chips' }, state.groups.map((g) =>
+                h('div', {
+                  key: g.id,
+                  className: 'mt-chip' + (g.id === (state.group || '') ? ' on' : ''),
+                  onClick: () => { setGroupId(g.id); setPage(0) },
+                }, [
+                  h('div', { key: 'l', className: 'mt-chip-label' }, g.name || '未命名群'),
+                  h('div', { key: 'v', className: 'mt-chip-val' }, `${g.counts.long}·${g.counts.mid}·${g.counts.short}`),
+                  h('div', { key: 'h', className: 'mt-chip-hint' }, g.id),
+                  h('div', { key: 'ops', className: 'mt-chip-ops' }, [
+                    h('button', {
+                      key: 'del',
+                      className: 'mt-btn danger xs',
+                      title: '把这个群的三档记忆整份删掉',
+                      onClick: (e) => { e.stopPropagation(); removeGroup(g) },
+                    }, '删'),
+                  ]),
+                ]))),
+          h('div', { key: 'add', className: 'mt-row', style: { marginTop: 12 } }, [
+            h('input', {
+              key: 'gid',
+              className: 'mt-in',
+              style: { maxWidth: 128 },
+              placeholder: '群号',
+              value: groupDraft.id,
+              onChange: (e) => setGroupDraft(Object.assign({}, groupDraft, { id: e.target.value.replace(/\D/g, '').slice(0, 12) })),
+            }),
+            h('input', {
+              key: 'gname',
+              className: 'mt-in',
+              style: { maxWidth: 200 },
+              placeholder: '群名（选填）',
+              value: groupDraft.name,
+              onChange: (e) => setGroupDraft(Object.assign({}, groupDraft, { name: e.target.value.slice(0, 40) })),
+            }),
+            h('button', {
+              key: 'add',
+              className: 'mt-btn',
+              disabled: busy || !/^\d{5,12}$/.test(groupDraft.id),
+              onClick: addGroup,
+            }, '添加群'),
+          ]),
         ]),
 
         // ---- 参数 ----
@@ -481,6 +550,7 @@ window.__ModuleLoader__.load({
 .mt-chip-label { font-size: 12px; color: color-mix(in oklab, currentColor 58%, transparent); }
 .mt-chip-val { font-size: 15px; font-weight: 600; margin: 2px 0; }
 .mt-chip-hint { font-size: 11px; color: color-mix(in oklab, currentColor 48%, transparent); }
+.mt-chip-ops { margin-top: 6px; display: flex; gap: 6px; }
 .mt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 14px; }
 .mt-num { display: flex; align-items: center; gap: 8px; }
 .mt-num span { color: color-mix(in oklab, currentColor 70%, transparent); white-space: nowrap; }

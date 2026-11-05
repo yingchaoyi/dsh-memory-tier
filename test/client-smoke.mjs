@@ -59,6 +59,11 @@ assert(def.name === 'settings.section' && def.label === '三档记忆', '分区�
 // ---- 假数据 + 递归渲染 ----
 const state = {
   ok: true,
+  group: '681553272',
+  groups: [
+    { id: '681553272', name: '大肥鱼窝', counts: { long: 3, mid: 2, short: 1 } },
+    { id: '179819603', name: '', counts: { long: 0, mid: 0, short: 0 } },
+  ],
   settings: {
     enabled: true, shortDays: 4, midDays: 30,
     caps: { long: 120, mid: 240, short: 60 },
@@ -121,6 +126,11 @@ assert(has('第 1/2 页'), '分页器显示页码：第 1/2 页')
 assert(has('下一页') && has('上一页'), '有上一页/下一页按钮')
 assert(has('共 13 条'), '顶部显示总条数')
 assert(has('搜这一档'), '有搜索框')
+assert(has('大肥鱼窝'), '群卡片显示群名')
+assert(has('未命名群'), '没名字的群显示占位名')
+assert(has('添加群'), '有添加群的按钮')
+assert(has('群名（选填）'), '添加群能填群名')
+assert(has('681553272'), '群卡片上有群号')
 assert(has('试一试'), '预览区在')
 assert(text.length > 300, '渲染出的文字量合理（' + text.length + ' 字）')
 

@@ -12,8 +12,9 @@ process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'mt-'))
 // 假 ingress 映射：两个群各一个会话，用来验按群隔离
 mkdirSync(join(process.env.DSH_HOME, 'dsh-astrbot-ingress'), { recursive: true })
 writeFileSync(join(process.env.DSH_HOME, 'dsh-astrbot-ingress', 'sessions.json'), JSON.stringify({
-  'bot:GroupMessage:681553272': { sessionId: 's-main', cwd: '/tmp', updatedAt: 200 },
+  'bot:GroupMessage:681553272': { sessionId: 's-main', cwd: '/tmp', updatedAt: 200, groupName: '大肥鱼窝' },
   'bot:GroupMessage:179819603': { sessionId: 's-other', cwd: '/tmp', updatedAt: 100 },
+  'bot:FriendMessage:314536763': { sessionId: 's-dm', cwd: '/tmp', updatedAt: 300 },
 }))
 
 const { apply } = await import('../lib/index.mjs')
@@ -196,5 +197,25 @@ assert(a.injected.includes('老王'), '主群注入里有老王')
 
 const searchOther = await call('mem_search', { query: '老王' }, inGroup('s-other'))
 assert(searchOther.text.includes('没有找到'), '在别的群搜不到主群的人')
+
+// ---- 群管理：只列群、能加能删、群名跟着走 ----
+assert(!(a.groups || []).some((g) => g.id === '314536763'), '私聊 QQ 号不算群，不进群列表')
+assert(!(a.groups || []).some((g) => g.id === 'default'), '网页/私聊的默认库不进群列表')
+assert((a.groups || []).some((g) => g.id === '681553272' && g.name === '大肥鱼窝'), '群名从 ingress 映射带过来')
+
+let gres = await postInMain('/api/memory-tier/group', { groupId: '555666777', name: '手动加的群' })
+assert(gres.ok && gres.group === '555666777', '能手动加群')
+let afterAdd = await getState('')
+assert((afterAdd.groups || []).some((g) => g.id === '555666777' && g.name === '手动加的群'), '加完立刻出现在列表里')
+
+gres = await postInMain('/api/memory-tier/group', { groupId: '555666777', action: 'delete' })
+assert(gres.ok, '能删群')
+let afterDel = await getState('')
+assert(!(afterDel.groups || []).some((g) => g.id === '555666777'), '删完不在列表里')
+
+const badGroup = await postInMain('/api/memory-tier/group', { groupId: 'default', name: 'x' })
+assert(badGroup.ok === false, 'default 不让从面板建')
+const badGroup2 = await postInMain('/api/memory-tier/group', { groupId: 'abc' })
+assert(badGroup2.ok === false, '非群号不让建')
 
 console.log('\n' + (process.exitCode ? '有失败项' : '全过'))
