@@ -131,6 +131,7 @@ assert(has('未命名群'), '没名字的群显示占位名')
 assert(has('添加群'), '有添加群的按钮')
 assert(has('群名（选填）'), '添加群能填群名')
 assert(has('681553272'), '群卡片上有群号')
+assert(has('改名'), '群卡片上有改名按钮')
 assert(has('试一试'), '预览区在')
 assert(text.length > 300, '渲染出的文字量合理（' + text.length + ' 字）')
 

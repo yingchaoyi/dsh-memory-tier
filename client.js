@@ -79,6 +79,7 @@ window.__ModuleLoader__.load({
       const [page, setPage] = useState(0)     // 第几页（从 0 起）
       const [groupId, setGroupId] = useState('')  // 当前在管哪个群
       const [groupDraft, setGroupDraft] = useState({ id: '', name: '' })  // 添加群的两个框
+      const [renameDraft, setRenameDraft] = useState({ id: '', name: '' })  // 正在给哪个群改名
       const alive = useRef(true)
 
       const refresh = useCallback(async (q, gid) => {
@@ -126,6 +127,20 @@ window.__ModuleLoader__.load({
           await refresh(undefined, id)
           flash(`群 ${id} 加上了`)
         } catch (error) { flash('添加失败：' + error.message) }
+        setBusy(false)
+      }
+
+      // 群名：AstrBot 那边不带群名时，自己在面板上改一个
+      const renameGroup = async (g) => {
+        const name = String(renameDraft.name || '').trim()
+        setBusy(true)
+        try {
+          const r = await jpost('/group', { groupId: g.id, name })
+          if (r && r.ok === false) throw new Error(r.message || '改名失败')
+          setRenameDraft({ id: '', name: '' })
+          await refresh(undefined, groupId || g.id)
+          flash(name ? `改好了：${name}` : '名字清掉了')
+        } catch (error) { flash('改名失败：' + error.message) }
         setBusy(false)
       }
 
@@ -286,7 +301,37 @@ window.__ModuleLoader__.load({
                   h('div', { key: 'l', className: 'mt-chip-label' }, g.name || '未命名群'),
                   h('div', { key: 'v', className: 'mt-chip-val' }, `${g.counts.long}·${g.counts.mid}·${g.counts.short}`),
                   h('div', { key: 'h', className: 'mt-chip-hint' }, g.id),
+                  renameDraft.id === g.id
+                    ? h('div', { key: 'rn', className: 'mt-row', style: { marginTop: 6 } }, [
+                      h('input', {
+                        key: 'i',
+                        className: 'mt-in',
+                        style: { maxWidth: 150 },
+                        placeholder: '群名',
+                        value: renameDraft.name,
+                        onClick: (e) => e.stopPropagation(),
+                        onChange: (e) => setRenameDraft(Object.assign({}, renameDraft, { name: e.target.value.slice(0, 40) })),
+                      }),
+                      h('button', {
+                        key: 'ok',
+                        className: 'mt-btn xs',
+                        disabled: busy,
+                        onClick: (e) => { e.stopPropagation(); renameGroup(g) },
+                      }, '存'),
+                      h('button', {
+                        key: 'no',
+                        className: 'mt-btn xs',
+                        onClick: (e) => { e.stopPropagation(); setRenameDraft({ id: '', name: '' }) },
+                      }, '取消'),
+                    ])
+                    : null,
                   h('div', { key: 'ops', className: 'mt-chip-ops' }, [
+                    h('button', {
+                      key: 'rn',
+                      className: 'mt-btn xs',
+                      title: '自己填个群名',
+                      onClick: (e) => { e.stopPropagation(); setRenameDraft({ id: g.id, name: g.name || '' }) },
+                    }, '改名'),
                     h('button', {
                       key: 'del',
                       className: 'mt-btn danger xs',
