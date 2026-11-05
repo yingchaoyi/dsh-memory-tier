@@ -200,6 +200,10 @@ assert(searchOther.text.includes('没有找到'), '在别的群搜不到主群�
 
 // ---- 群管理：只列群、能加能删、群名跟着走 ----
 assert(!(a.groups || []).some((g) => g.id === '314536763'), '私聊 QQ 号不算群，不进群列表')
+// 早期版本把私聊 QQ 号也建成了库：这种遗留 key 也不该冒出来
+await postInMain('/api/memory-tier/group', { groupId: '314536763' })
+const a2 = await stateOf('681553272')
+assert(!(a2.groups || []).some((g) => g.id === '314536763'), '库里遗留的私聊 key 不进群列表')
 assert(!(a.groups || []).some((g) => g.id === 'default'), '网页/私聊的默认库不进群列表')
 assert((a.groups || []).some((g) => g.id === '681553272' && g.name === '大肥鱼窝'), '群名从 ingress 映射带过来')
 
