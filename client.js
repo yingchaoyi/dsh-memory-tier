@@ -77,12 +77,19 @@ window.__ModuleLoader__.load({
       const [draft, setDraft] = useState({ text: '', tags: '', imp: 3, kind: 'fact', pinned: false })
       const [q, setQ] = useState('')          // 这一档里的搜索词
       const [page, setPage] = useState(0)     // 第几页（从 0 起）
+      const [groupId, setGroupId] = useState('')  // 当前在管哪个群
       const alive = useRef(true)
 
-      const refresh = useCallback(async (q) => {
+      const refresh = useCallback(async (q, gid) => {
         try {
-          const s = await jget('/state' + (q ? '?q=' + encodeURIComponent(q) : ''))
-          if (alive.current) setState(s)
+          const params = []
+          if (q) params.push('q=' + encodeURIComponent(q))
+          if (gid) params.push('group=' + encodeURIComponent(gid))
+          const s = await jget('/state' + (params.length ? '?' + params.join('&') : ''))
+          if (alive.current) {
+            setState(s)
+            if (s && s.group && !gid) setGroupId(s.group)
+          }
         } catch (error) {
           if (alive.current) setMsg('读取失败：' + error.message)
         }
@@ -90,9 +97,9 @@ window.__ModuleLoader__.load({
 
       useEffect(() => {
         alive.current = true
-        refresh()
+        refresh(undefined, groupId)
         return () => { alive.current = false }
-      }, [refresh])
+      }, [refresh, groupId])
 
       // 换档或改搜索词，回到第一页
       useEffect(() => { setPage(0) }, [tab, q])
@@ -101,6 +108,9 @@ window.__ModuleLoader__.load({
         setMsg(text)
         setTimeout(() => { if (alive.current) setMsg('') }, 2600)
       }
+
+      // 所有写操作都带上当前群，后端按群落库
+      const post = (path, body) => jpost(path, Object.assign({ groupId: (state && state.group) || groupId }, body || {}))
 
       const patchSettings = async (patch) => {
         setBusy(true)
@@ -142,7 +152,7 @@ window.__ModuleLoader__.load({
         if (!text) return flash('先写点什么')
         setBusy(true)
         try {
-          const r = await jpost('/entry', {
+          const r = await post('/entry', {
             tier: tab,
             text,
             tags: draft.tags.split(/[,，\s]+/).filter(Boolean),
@@ -152,7 +162,7 @@ window.__ModuleLoader__.load({
           })
           if (r.ok) {
             setDraft({ text: '', tags: '', imp: 3, kind: 'fact', pinned: false })
-            await refresh()
+            await refresh(undefined, groupId)
             flash(r.action === 'updated' ? '这条记过了，已合并' : '已记下')
           } else flash('没记上：' + (r.message || r.error || ''))
         } catch (error) { flash('没记上：' + error.message) }
@@ -162,31 +172,31 @@ window.__ModuleLoader__.load({
       const editEntry = async (entry) => {
         const text = window.prompt('改这条记忆：', entry.text)
         if (text === null) return
-        const r = await jpost('/entry', { tier: tab, id: entry.id, text })
-        if (r.ok) { await refresh(); flash('改好了') } else flash('改失败')
+        const r = await post('/entry', { tier: tab, id: entry.id, text })
+        if (r.ok) { await refresh(undefined, groupId); flash('改好了') } else flash('改失败')
       }
 
       const togglePin = async (entry) => {
-        const r = await jpost('/entry', { tier: tab, id: entry.id, pinned: !entry.pinned })
-        if (r.ok) { await refresh(); flash(entry.pinned ? '取消置顶' : '置顶了（永不被容量淘汰）') }
+        const r = await post('/entry', { tier: tab, id: entry.id, pinned: !entry.pinned })
+        if (r.ok) { await refresh(undefined, groupId); flash(entry.pinned ? '取消置顶' : '置顶了（永不被容量淘汰）') }
       }
 
       const removeEntry = async (entry) => {
         if (!window.confirm('删掉这条？\n\n' + entry.text)) return
-        const r = await jpost('/delete', { tier: tab, id: entry.id })
-        if (r.ok) { await refresh(); flash('删了') }
+        const r = await post('/delete', { tier: tab, id: entry.id })
+        if (r.ok) { await refresh(undefined, groupId); flash('删了') }
       }
 
       const clearTier = async () => {
         if (!window.confirm('清空「' + (TIERS.find((t) => t.key === tab) || {}).label + '」这一档？不能撤销。')) return
-        await jpost('/clear', { tier: tab })
-        await refresh()
+        await post('/clear', { tier: tab })
+        await refresh(undefined, groupId)
         flash('清空了')
       }
 
       const runPreview = async () => {
         try {
-          const r = await jpost('/preview', { q: previewQ })
+          const r = await post('/preview', { q: previewQ })
           setPreview(r.text || '（这一轮什么都不会注入）')
         } catch (error) { flash('预览失败：' + error.message) }
       }
@@ -222,6 +232,23 @@ window.__ModuleLoader__.load({
             ? h('div', { key: 'sweep', className: 'mt-muted', style: { marginTop: 6 } },
               '刚清理过：中期 -' + state.swept.mid + '，短期 -' + state.swept.short)
             : null,
+        ]),
+
+        // ---- 群切换：每个群一套独立记忆 ----
+        h('div', { key: 'groups', className: 'mt-card' }, [
+          h('div', { key: 't', className: 'mt-sub' }, '按群分开管理'),
+          h('div', { key: 'd', className: 'mt-muted' },
+            '每个 QQ 群一套自己的三档记忆，互相看不见、也不会互相占预算。换群只影响这里的查看和手动增删；聊天时自动按当前群取。'),
+          h('div', { key: 'chips', className: 'mt-chips' }, (state.groups || []).map((g) =>
+            h('div', {
+              key: g.id,
+              className: 'mt-chip' + (g.id === (state.group || '') ? ' on' : ''),
+              onClick: () => { setGroupId(g.id); setPage(0) },
+            }, [
+              h('div', { key: 'l', className: 'mt-chip-label' }, g.name || g.id),
+              h('div', { key: 'v', className: 'mt-chip-val' }, `${g.counts.long}·${g.counts.mid}·${g.counts.short}`),
+              h('div', { key: 'h', className: 'mt-chip-hint' }, g.id === 'default' ? '网页/私聊' : g.id),
+            ]))),
         ]),
 
         // ---- 参数 ----

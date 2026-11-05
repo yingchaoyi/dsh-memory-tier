@@ -2,11 +2,19 @@
  * smoke.mjs —— 不启 DSH 也能验：工具能挂、路由能读能写、三档的容量/过期/注入真的按规则走。
  * 跑法：DSH_HOME=/tmp/mt-test node test/smoke.mjs
  */
-import { mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-process.env.DSH_HOME = process.env.DSH_HOME || mkdtempSync(join(tmpdir(), 'mt-'))
+// 永远用临时目录：外面可能已经设了 DSH_HOME（指向真库），别把测试写进去
+process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'mt-'))
+
+// 假 ingress 映射：两个群各一个会话，用来验按群隔离
+mkdirSync(join(process.env.DSH_HOME, 'dsh-astrbot-ingress'), { recursive: true })
+writeFileSync(join(process.env.DSH_HOME, 'dsh-astrbot-ingress', 'sessions.json'), JSON.stringify({
+  'bot:GroupMessage:681553272': { sessionId: 's-main', cwd: '/tmp', updatedAt: 200 },
+  'bot:GroupMessage:179819603': { sessionId: 's-other', cwd: '/tmp', updatedAt: 100 },
+}))
 
 const { apply } = await import('../lib/index.mjs')
 
@@ -31,7 +39,10 @@ const assert = (cond, m) => (cond ? ok(m) : fail(m))
 assert(tools.size === 5, '挂了 5 个工具：' + [...tools.keys()].join(', '))
 assert(routes.size >= 6, '挂了 ' + routes.size + ' 条路由')
 
-const call = async (name, args) => tools.get(name).execute(args || {}, {})
+// 主群 681553272 的会话 s-main；工具靠 session→群映射决定写哪个库
+const MAIN = '681553272'
+const inGroup = (sid) => ({ agent: { session: { id: sid } } })
+const call = async (name, args, exec) => tools.get(name).execute(args || {}, exec || inGroup('s-main'))
 
 // 写三档
 let r = await call('mem_note', { tier: 'long', text: '小刘是刀塔二队长，段位传奇', tags: ['小刘', '刀塔'], imp: 5, kind: 'person', pinned: true })
@@ -73,7 +84,10 @@ const fakeRes = () => {
 }
 const getState = async (q) => {
   const res = fakeRes()
-  await routes.get('/api/memory-tier/state')({ url: '/api/memory-tier/state' + (q ? '?q=' + encodeURIComponent(q) : ''), on: () => {} }, res)
+  const qs = []
+  if (q) qs.push('q=' + encodeURIComponent(q))
+  qs.push('group=' + MAIN)
+  await routes.get('/api/memory-tier/state')({ url: '/api/memory-tier/state?' + qs.join('&'), on: () => {} }, res)
   return JSON.parse(res.out.body)
 }
 let st = await getState('小刘最近在打什么')
@@ -97,15 +111,19 @@ const postJson = async (path, body) => {
   await handler(req, res)
   return JSON.parse(res.out.body)
 }
-let sres = await postJson('/api/memory-tier/settings', { shortDays: 9, caps: { short: 5 } })
+const MAIN_BODY = (body) => Object.assign({ groupId: MAIN }, body || {})
+async function postInMain(path, body) {
+  return postJson(path, MAIN_BODY(body))
+}
+let sres = await postInMain('/api/memory-tier/settings', { shortDays: 9, caps: { short: 5 } })
 assert(sres.ok && sres.settings.shortDays === 9 && sres.settings.caps.short === 5, '参数保存（短期 9 天 / 容量 5）')
 // 嵌套字段不能被浅合并打回默认（改中期不该动长期）
 const before = sres.settings
-const rLong = await postJson('/api/memory-tier/settings', { inject: { long: 30 } })
+const rLong = await postInMain('/api/memory-tier/settings', { inject: { long: 30 } })
 assert(rLong.settings.inject.long === 30 && rLong.settings.inject.mid === before.inject.mid, '改长期加载条数不影响中期')
-const rMid = await postJson('/api/memory-tier/settings', { inject: { mid: 7 } })
+const rMid = await postInMain('/api/memory-tier/settings', { inject: { mid: 7 } })
 assert(rMid.settings.inject.long === 30 && rMid.settings.inject.mid === 7, '改中期加载条数不影响长期')
-const rCaps = await postJson('/api/memory-tier/settings', { caps: { mid: 300 } })
+const rCaps = await postInMain('/api/memory-tier/settings', { caps: { mid: 300 } })
 assert(rCaps.settings.caps.mid === 300 && rCaps.settings.caps.long === before.caps.long, '改中期容量不影响长期容量')
 
 // 短期超容量 → 按分数淘汰，且保留高重要度的
@@ -117,19 +135,19 @@ assert(st.tiers.short.length === 5, '短期容量 5 生效（现在 ' + st.tiers
 assert(st.tiers.short.some((e) => e.text.includes('4 号')), '淘汰时保住了高重要度那条')
 
 // 预览路由
-const prev = await postJson('/api/memory-tier/preview', { q: '小刘' })
+const prev = await postInMain('/api/memory-tier/preview', { q: '小刘' })
 assert(prev.ok && prev.text.includes('小刘'), '预览路由可用')
 
 // 删一条
 const target = st.tiers.short[0]
-const del = await postJson('/api/memory-tier/delete', { tier: 'short', id: target.id })
+const del = await postInMain('/api/memory-tier/delete', { tier: 'short', id: target.id })
 assert(del.ok && del.removed === 1, '删除生效')
 
 // 锁定底稿：不许删、注入里带 🔒
 r = await call('mem_note', { tier: 'long', text: '小刘 2026-10 说自己在冲万古，至今没上（待证）', tags: ['小刘', '万古'], imp: 4, kind: 'person', locked: true })
 assert(r.ok, '写入锁定底稿')
 const lockedEntry = (await getState('')).tiers.long.find((e) => e.locked)
-const delLocked = await postJson('/api/memory-tier/delete', { tier: 'long', id: lockedEntry.id })
+const delLocked = await postInMain('/api/memory-tier/delete', { tier: 'long', id: lockedEntry.id })
 assert(!delLocked.ok, '锁定条目拒绝删除')
 const delByQuery = await call('mem_forget', { query: '万古', tier: 'long' })
 assert(!delByQuery.ok, 'mem_forget 也删不掉锁定条目')
@@ -139,7 +157,7 @@ assert(st.injected.includes('回完这轮顺手判一句'), '注入尾部带「�
 
 // 自动记录：群消息进来 → 本地抽人名 → 短期档（等一次 tick）
 const fakeSession = {
-  id: 'fake-session',
+  id: 's-main',
   messages: () => [{ role: 'user', content: '[小刘(2313535058)] 今天又没上万古，非说是队友太菜' }],
 }
 ctx.agents.list = () => [{ session: fakeSession }]
@@ -149,5 +167,27 @@ const auto = st.tiers.short.find((e) => e.text.includes('今天又没上万古')
 assert(!!auto, '自动把群消息记进短期档')
 assert(auto && auto.tags.includes('小刘'), '自动记录抽出了人名当标签：' + (auto ? auto.tags.join('/') : ''))
 assert(auto && auto.text.startsWith('小刘：'), '自动记录带上说话人')
+
+// ---- 按群隔离 ----
+await call('mem_note', { tier: 'long', text: '老群的人：老王(123456789) 开烧烤店' }, inGroup('s-main'))
+await call('mem_note', { tier: 'mid', text: '别的群的梗：他们管群主叫狗管理' }, inGroup('s-other'))
+
+const stateOf = async (gid) => {
+  const res = fakeRes()
+  await routes.get('/api/memory-tier/state')({ url: '/api/memory-tier/state?group=' + gid, on: () => {} }, res)
+  return JSON.parse(res.out.body)
+}
+const a = await stateOf('681553272')
+const b = await stateOf('179819603')
+assert(a.tiers.long.some((e) => e.text.includes('老王')), '主群写进了主群库')
+assert(!b.tiers.long.some((e) => e.text.includes('老王')), '别的群看不到主群的长期记忆')
+assert(b.tiers.mid.some((e) => e.text.includes('狗管理')), '别的群写进自己的库')
+assert(!a.tiers.mid.some((e) => e.text.includes('狗管理')), '主群看不到别的群的记忆')
+assert((a.groups || []).some((g) => g.id === '179819603') && (a.groups || []).some((g) => g.id === '681553272'), '群列表里两个群都在')
+assert(!b.injected.includes('老王'), '别的群注入里没有主群的人和事')
+assert(a.injected.includes('老王'), '主群注入里有老王')
+
+const searchOther = await call('mem_search', { query: '老王' }, inGroup('s-other'))
+assert(searchOther.text.includes('没有找到'), '在别的群搜不到主群的人')
 
 console.log('\n' + (process.exitCode ? '有失败项' : '全过'))
