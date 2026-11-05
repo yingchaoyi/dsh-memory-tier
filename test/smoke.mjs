@@ -126,6 +126,13 @@ assert(rMid.settings.inject.long === 30 && rMid.settings.inject.mid === 7, '改�
 const rCaps = await postInMain('/api/memory-tier/settings', { caps: { mid: 300 } })
 assert(rCaps.settings.caps.mid === 300 && rCaps.settings.caps.long === before.caps.long, '改中期容量不影响长期容量')
 
+// 会话自动重置：开关 + 天/小时/分钟，全 0 兜底成 1 小时
+const rr = await postInMain('/api/memory-tier/settings', { sessionReset: { enabled: true, days: 2, hours: 3, minutes: 15 } })
+assert(rr.settings.sessionReset.enabled === true && rr.settings.sessionReset.days === 2 && rr.settings.sessionReset.hours === 3 && rr.settings.sessionReset.minutes === 15, '会话自动重置参数保存')
+const rz = await postInMain('/api/memory-tier/settings', { sessionReset: { days: 0, hours: 0, minutes: 0 } })
+assert(rz.settings.sessionReset.hours === 1, '全 0 兜底成 1 小时')
+await postInMain('/api/memory-tier/settings', { sessionReset: { enabled: false, hours: 6, minutes: 0 } })
+
 // 短期超容量 → 按分数淘汰，且保留高重要度的
 for (let i = 0; i < 9; i++) {
   await call('mem_note', { tier: 'short', text: '流水事 ' + i + ' 号，内容各不相同', imp: i === 4 ? 5 : 1, kind: 'event' })

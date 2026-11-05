@@ -125,6 +125,7 @@ window.__ModuleLoader__.load({
       }
 
       const patchStyle = (patch) => patchSettings({ styleRef: Object.assign({}, (s.styleRef || {}), patch) })
+      const patchReset = (patch) => patchSettings({ sessionReset: Object.assign({}, (s.sessionReset || {}), patch) })
 
       if (!state) {
         return h('div', { className: 'mt-wrap' }, h('div', { className: 'mt-muted' }, '读取中…'))
@@ -273,6 +274,27 @@ window.__ModuleLoader__.load({
           ]),
           h('div', { key: 'note', className: 'mt-muted' },
             '容量满了会按「重要性 → 新近度 → 命中次数」淘汰；标了 ★ 的长期记忆不会被淘汰。'),
+        ]),
+
+        // ---- 会话自动重置 ----
+        h('div', { key: 'reset', className: 'mt-card' }, [
+          h('div', { key: 't', className: 'mt-sub' }, '会话自动重置（省 token）'),
+          h('div', { key: 'd', className: 'mt-muted' },
+            '群聊会话安静超过设定时间就自动解绑，下一条消息开新会话。三档记忆不受影响；旧会话只是归档，需要时还能用 /dsh use 接回来。只在没有回合在跑的时候动手。'),
+          h('label', { key: 'on', className: 'mt-check' }, [
+            h('input', {
+              key: 'c',
+              type: 'checkbox',
+              checked: !!(s.sessionReset && s.sessionReset.enabled),
+              onChange: (e) => patchReset({ enabled: e.target.checked }),
+            }),
+            h('span', { key: 'x' }, '开启自动重置'),
+          ]),
+          h('div', { key: 'g', className: 'mt-grid' }, [
+            h(NumField, { key: 'rd', label: '空闲多久·天', value: (s.sessionReset || {}).days, min: 0, max: 30, suffix: '天', onChange: (v) => patchReset({ days: v }) }),
+            h(NumField, { key: 'rh', label: '空闲多久·小时', value: (s.sessionReset || {}).hours, min: 0, max: 23, suffix: '时', onChange: (v) => patchReset({ hours: v }) }),
+            h(NumField, { key: 'rm', label: '空闲多久·分钟', value: (s.sessionReset || {}).minutes, min: 0, max: 59, suffix: '分', onChange: (v) => patchReset({ minutes: v }) }),
+          ]),
         ]),
 
         // ---- 人设 ----
