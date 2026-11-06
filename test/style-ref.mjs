@@ -82,7 +82,6 @@ assert(captured && typeof captured.text === 'function', '注入挂上了')
 let text = captured.text()
 assert(text.includes('【贴吧语料'), '白名单群：带语料块')
 assert(text.includes('· 抗压背锅：'), '白名单群：带上某吧的句式')
-assert(text.includes('【人设/说话方式】'), '人设照旧在')
 
 await postSettings({ styleRef: { enabled: true, groups: ['999999999'], perBar: 2, bars: 2, budget: 500 } })
 text = captured.text()

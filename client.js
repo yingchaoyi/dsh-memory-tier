@@ -3,7 +3,7 @@
  *
  * 一块面板解决三件事：
  *   1. 看：三档各存了什么、占多少、什么时候过期的；
- *   2. 改：参数（天数 / 容量 / 注入条数 / 字数预算）、人设，以及每条记忆本身；
+ *   2. 改：参数（天数 / 容量 / 注入条数 / 字数预算），以及每条记忆本身；
  *   3. 试：输入一句话，看这一轮到底会注入什么、花多少个字。
  */
 window.__ModuleLoader__.load({
@@ -28,7 +28,7 @@ window.__ModuleLoader__.load({
     }))
 
     const TIERS = [
-      { key: 'long', label: '长期', hint: '永久，不会淡忘。只放最关键的事实和人设。' },
+      { key: 'long', label: '长期', hint: '永久，不会淡忘。只放最关键的事实。' },
       { key: 'mid', label: '中期', hint: '到时间自动消失，满了按重要性淘汰。' },
       { key: 'short', label: '短期', hint: '最近几天群里的趣事，用来接话。' },
     ]
@@ -409,22 +409,6 @@ window.__ModuleLoader__.load({
             h(NumField, { key: 'rh', label: '空闲多久·小时', value: (s.sessionReset || {}).hours, min: 0, max: 23, suffix: '时', onChange: (v) => patchReset({ hours: v }) }),
             h(NumField, { key: 'rm', label: '空闲多久·分钟', value: (s.sessionReset || {}).minutes, min: 0, max: 59, suffix: '分', onChange: (v) => patchReset({ minutes: v }) }),
           ]),
-        ]),
-
-        // ---- 人设 ----
-        h('div', { key: 'persona', className: 'mt-card' }, [
-          h('div', { key: 't', className: 'mt-sub' }, '人设 / 说话方式（长期，永久生效）'),
-          h('textarea', {
-            key: 'ta',
-            className: 'mt-ta',
-            rows: 5,
-            defaultValue: s.personaText || '',
-            placeholder: '写希望我保持的语气、规矩、称呼、忌讳……这段每一轮都会带上。',
-            onBlur: (e) => {
-              const v = e.target.value
-              if (v !== (s.personaText || '')) patchSettings({ personaText: v })
-            },
-          }),
         ]),
 
         // ---- 贴吧语料 ----
